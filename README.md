@@ -1,3 +1,9 @@
+# Repository note
+
+This repository is designed to mirror Binomial, LLC's
+[basis\_universal](https://github.com/BinomialLLC/basis_universal) repo. Please
+file all issues on, and make all contributions to, the upstream repo.
+
 # basis_universal
 Basis Universal GPU Texture and Texture Video Compression Reference Codec
 
