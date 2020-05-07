@@ -17,17 +17,22 @@
 #include <limits.h>
 #include <vector>
 
-#ifndef IS_BIG_ENDIAN
+#ifndef BASISD_IS_BIG_ENDIAN
 // TODO: This doesn't work on OSX. How can this be so difficult?
 //#if defined(__BIG_ENDIAN__) || defined(_BIG_ENDIAN) || defined(BIG_ENDIAN)
-//	#define IS_BIG_ENDIAN (1)
+//	#define BASISD_IS_BIG_ENDIAN (1)
 //#else
-	#define IS_BIG_ENDIAN (0)
+	#define BASISD_IS_BIG_ENDIAN (0)
 //#endif
 #endif
 
-#ifndef USE_UNALIGNED_WORD_READS
-#define USE_UNALIGNED_WORD_READS (1)
+#ifndef BASISD_USE_UNALIGNED_WORD_READS
+	#ifdef __EMSCRIPTEN__
+		// Can't use unaligned loads/stores with WebAssembly.
+		#define BASISD_USE_UNALIGNED_WORD_READS (0)
+	#else
+		#define BASISD_USE_UNALIGNED_WORD_READS (1)
+	#endif
 #endif
 
 #define BASISD_SUPPORTED_BASIS_VERSION (0x13)
@@ -190,7 +195,7 @@ namespace basist
 	{
 		crc = ~crc;
 
-		const uint8_t* p = reinterpret_cast<const uint8_t*>(r);
+		const uint8_t* p = static_cast<const uint8_t*>(r);
 		for (; size; --size)
 		{
 			const uint16_t q = *p++ ^ (crc >> 8);
@@ -7387,7 +7392,7 @@ namespace basist
 
 					uint32_t m = (le * 5 + he * 3) / 8;
 
-					int err = labs((int)v - (int)m);
+					int err = (int)labs((int)v - (int)m);
 					if (err < lowest_err)
 					{
 						lowest_err = err;
@@ -7410,7 +7415,7 @@ namespace basist
 				uint32_t le = (l << 1);
 				le = (le << 4) | le;
 
-				int err = labs((int)v - (int)le);
+				int err = (int)labs((int)v - (int)le);
 				if (err < lowest_err)
 				{
 					lowest_err = err;
@@ -7432,7 +7437,7 @@ namespace basist
 				uint32_t he = (h << 1) | 1;
 				he = (he << 4) | he;
 
-				int err = labs((int)v - (int)he);
+				int err = (int)labs((int)v - (int)he);
 				if (err < lowest_err)
 				{
 					lowest_err = err;
@@ -7461,7 +7466,7 @@ namespace basist
 
 					uint32_t m = (le * 5 + he * 3) / 8;
 
-					int err = labs((int)v - (int)m);
+					int err = (int)labs((int)v - (int)m);
 					if (err < lowest_err)
 					{
 						lowest_err = err;
@@ -7491,7 +7496,7 @@ namespace basist
 
 					uint32_t m = (le * 5 + he * 3) / 8;
 
-					int err = labs((int)v - (int)m);
+					int err = (int)labs((int)v - (int)m);
 					if (err < lowest_err)
 					{
 						lowest_err = err;
@@ -8510,7 +8515,7 @@ namespace basist
 						for (uint32_t i = 0; i < 4; i++)
 						{
 							packed_colors[i] = static_cast<uint16_t>((mul_8(colors[i].r, 31) << 11) | (mul_8(colors[i].g, 63) << 5) | mul_8(colors[i].b, 31));
-							if (IS_BIG_ENDIAN)
+							if (BASISD_IS_BIG_ENDIAN)
 								packed_colors[i] = byteswap_uint16(packed_colors[i]);
 						}
 					}
@@ -8519,7 +8524,7 @@ namespace basist
 						for (uint32_t i = 0; i < 4; i++)
 						{
 							packed_colors[i] = static_cast<uint16_t>((mul_8(colors[i].b, 31) << 11) | (mul_8(colors[i].g, 63) << 5) | mul_8(colors[i].r, 31));
-							if (IS_BIG_ENDIAN)
+							if (BASISD_IS_BIG_ENDIAN)
 								packed_colors[i] = byteswap_uint16(packed_colors[i]);
 						}
 					}
@@ -8560,12 +8565,12 @@ namespace basist
 						for (uint32_t x = 0; x < max_x; x++)
 						{
 							uint16_t cur = reinterpret_cast<uint16_t*>(pDst_pixels)[x];
-							if (IS_BIG_ENDIAN)
+							if (BASISD_IS_BIG_ENDIAN)
 								cur = byteswap_uint16(cur);
 
 							cur = (cur & 0xF) | packed_colors[(s >> (x * 2)) & 3];
 							
-							if (IS_BIG_ENDIAN)
+							if (BASISD_IS_BIG_ENDIAN)
 								cur = byteswap_uint16(cur);
 
 							reinterpret_cast<uint16_t*>(pDst_pixels)[x] = cur;
@@ -8591,7 +8596,7 @@ namespace basist
 					for (uint32_t i = 0; i < 4; i++)
 					{
 						packed_colors[i] = static_cast<uint16_t>((mul_8(colors[i].r, 15) << 12) | (mul_8(colors[i].g, 15) << 8) | (mul_8(colors[i].b, 15) << 4) | 0xF);
-						if (IS_BIG_ENDIAN)
+						if (BASISD_IS_BIG_ENDIAN)
 							packed_colors[i] = byteswap_uint16(packed_colors[i]);
 					}
 
@@ -8622,7 +8627,7 @@ namespace basist
 					for (uint32_t i = 0; i < 4; i++)
 					{
 						packed_colors[i] = mul_8(colors[i].g, 15);
-						if (IS_BIG_ENDIAN)
+						if (BASISD_IS_BIG_ENDIAN)
 							packed_colors[i] = byteswap_uint16(packed_colors[i]);
 					}
 
@@ -11795,7 +11800,7 @@ namespace basist
 		if (!codesize)
 			return 0;
 
-		if ((IS_BIG_ENDIAN) || (!USE_UNALIGNED_WORD_READS) || (bit_offset >= 112))
+		if ((BASISD_IS_BIG_ENDIAN) || (!BASISD_USE_UNALIGNED_WORD_READS) || (bit_offset >= 112))
 		{
 			const uint8_t* pBytes = &pBuf[bit_offset >> 3U];
 
@@ -11849,7 +11854,7 @@ namespace basist
 			return 0;
 		assert(bit_offset < 112);
 
-		if ((IS_BIG_ENDIAN) || (!USE_UNALIGNED_WORD_READS))
+		if ((BASISD_IS_BIG_ENDIAN) || (!BASISD_USE_UNALIGNED_WORD_READS))
 		{
 			const uint8_t* pBytes = &pBuf[bit_offset >> 3U];
 
@@ -12179,7 +12184,7 @@ namespace basist
 			uint64_t bits;
 			
 			// Read the weight bits
-			if ((IS_BIG_ENDIAN) || (!USE_UNALIGNED_WORD_READS))
+			if ((BASISD_IS_BIG_ENDIAN) || (!BASISD_USE_UNALIGNED_WORD_READS))
 				bits = read_bits64(blk.m_bytes, bit_ofs, std::min<int>(64, 128 - (int)bit_ofs));
 			else
 			{
@@ -14682,7 +14687,9 @@ namespace basist
 				total_r += r; total_g += g; total_b += b;
 			}
 
-			avg_r = (total_r + 8) >> 4, avg_g = (total_g + 8) >> 4, avg_b = (total_b + 8) >> 4;
+			avg_r = (total_r + 8) >> 4;
+			avg_g = (total_g + 8) >> 4;
+			avg_b = (total_b + 8) >> 4;
 
 			int icov[6] = { 0, 0, 0, 0, 0, 0 };
 			for (uint32_t i = 0; i < 16; i++)
@@ -14778,7 +14785,9 @@ namespace basist
 						total_b += pSrc_pixels[i].b;
 					}
 
-					avg_r = (total_r + 8) >> 4, avg_g = (total_g + 8) >> 4, avg_b = (total_b + 8) >> 4;
+					avg_r = (total_r + 8) >> 4;
+					avg_g = (total_g + 8) >> 4;
+					avg_b = (total_b + 8) >> 4;
 				}
 
 				// All selectors equal - treat it as a solid block which should always be equal or better.
@@ -14929,7 +14938,9 @@ namespace basist
 			}
 			else
 			{
-				avg_r = (total_r + 8) >> 4, avg_g = (total_g + 8) >> 4, avg_b = (total_b + 8) >> 4;
+				avg_r = (total_r + 8) >> 4;
+				avg_g = (total_g + 8) >> 4;
+				avg_b = (total_b + 8) >> 4;
 
 				// Find the shortest vector from a AABB corner to the block's average color.
 				// This is to help avoid outliers.
@@ -15039,20 +15050,29 @@ namespace basist
 						}
 					}
 
-					low_c = low_dot0 & 15, high_c = ~high_dot0 & 15;
+					low_c = low_dot0 & 15;
+					high_c = ~high_dot0 & 15;
 					uint32_t r = (high_dot0 & ~15) - (low_dot0 & ~15);
 
 					uint32_t tr = (high_dot1 & ~15) - (low_dot1 & ~15);
-					if (tr > r)
-						low_c = low_dot1 & 15, high_c = ~high_dot1 & 15, r = tr;
+					if (tr > r) {
+						low_c = low_dot1 & 15;
+						high_c = ~high_dot1 & 15;
+						r = tr;
+					}
 
 					tr = (high_dot2 & ~15) - (low_dot2 & ~15);
-					if (tr > r)
-						low_c = low_dot2 & 15, high_c = ~high_dot2 & 15, r = tr;
+					if (tr > r) {
+						low_c = low_dot2 & 15;
+						high_c = ~high_dot2 & 15;
+						r = tr;
+					}
 
 					tr = (high_dot3 & ~15) - (low_dot3 & ~15);
-					if (tr > r)
-						low_c = low_dot3 & 15, high_c = ~high_dot3 & 15;
+					if (tr > r) {
+						low_c = low_dot3 & 15;
+						high_c = ~high_dot3 & 15;
+					}
 				}
 
 				lr = to_5(pSrc_pixels[low_c].r);
@@ -15086,7 +15106,9 @@ namespace basist
 						total_b += pSrc_pixels[i].b;
 					}
 
-					avg_r = (total_r + 8) >> 4, avg_g = (total_g + 8) >> 4, avg_b = (total_b + 8) >> 4;
+					avg_r = (total_r + 8) >> 4;
+					avg_g = (total_g + 8) >> 4;
+					avg_b = (total_b + 8) >> 4;
 				}
 
 				// All selectors equal - treat it as a solid block which should always be equal or better.
