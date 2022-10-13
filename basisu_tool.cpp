@@ -54,6 +54,7 @@ enum tool_mode
 	cBench,
 	cCompSize,
 	cTest,
+	cCLBench,
 	cSplitImage,
 	cCombineImages
 };
@@ -136,6 +137,7 @@ static void print_usage()
 		" -no_ktx: Disable KTX writing when unpacking (faster, less output files)\n"
 		" -ktx_only: Only write KTX files when unpacking (faster, less output files)\n"
 		" -write_out: Write 3dfx OUT files when unpacking FXT1 textures\n"
+		" -format_only: Only unpack the specified format, by its numeric code.\n"
 		" -etc1_only: Only unpack to ETC1, skipping the other texture formats during -unpack\n"
 		" -disable_hierarchical_endpoint_codebooks: Disable hierarchical endpoint codebook usage, slower but higher quality on some compression levels\n"
 		" -compare_ssim: Compute and display SSIM of image comparison (slow)\n"
@@ -286,6 +288,7 @@ public:
 		m_no_ktx(false),
 		m_ktx_only(false),
 		m_write_out(false),
+		m_format_only(-1),
 		m_etc1_only(false),
 		m_fuzz_testing(false),
 		m_compare_ssim(false),
@@ -363,6 +366,8 @@ public:
 				m_mode = cCompSize;
 			else if (strcasecmp(pArg, "-test") == 0)
 				m_mode = cTest;
+			else if (strcasecmp(pArg, "-clbench") == 0)
+				m_mode = cCLBench;
 			else if (strcasecmp(pArg, "-test_dir") == 0)
 			{
 				REMAINING_ARGS_CHECK(1);
@@ -613,8 +618,17 @@ public:
 				m_ktx_only = true;
 			else if (strcasecmp(pArg, "-write_out") == 0)
 				m_write_out = true;
+			else if (strcasecmp(pArg, "-format_only") == 0)
+			{
+				REMAINING_ARGS_CHECK(1);
+				m_format_only = atoi(arg_v[arg_index + 1]);
+				arg_count++;
+			}
 			else if (strcasecmp(pArg, "-etc1_only") == 0)
+			{
 				m_etc1_only = true;
+				m_format_only = (int)basist::transcoder_texture_format::cTFETC1_RGB;
+			}
 			else if (strcasecmp(pArg, "-disable_hierarchical_endpoint_codebooks") == 0)
 				m_comp_params.m_disable_hierarchical_endpoint_codebooks = true;
 			else if (strcasecmp(pArg, "-opencl") == 0)
@@ -828,6 +842,8 @@ public:
 
 	std::string m_output_filename;
 	std::string m_output_path;
+
+	int m_format_only;
 
 	std::string m_multifile_printf;
 	uint32_t m_multifile_first;
@@ -1503,9 +1519,9 @@ static bool unpack_and_validate_ktx2_file(
 	int first_format = 0;
 	int last_format = (int)basist::transcoder_texture_format::cTFTotalTextureFormats;
 
-	if (opts.m_etc1_only)
+	if (opts.m_format_only > -1)
 	{
-		first_format = (int)basist::transcoder_texture_format::cTFETC1_RGB;
+		first_format = opts.m_format_only;
 		last_format = first_format + 1;
 	}
 
@@ -1910,9 +1926,9 @@ static bool unpack_and_validate_basis_file(
 	int first_format = 0;
 	int last_format = (int)basist::transcoder_texture_format::cTFTotalTextureFormats;
 
-	if (opts.m_etc1_only)
+	if (opts.m_format_only > -1)
 	{
-		first_format = (int)basist::transcoder_texture_format::cTFETC1_RGB;
+		first_format = opts.m_format_only;
 		last_format = first_format + 1;
 	}
 
@@ -2255,7 +2271,8 @@ static bool unpack_and_validate_basis_file(
 
 	uint32_t max_mipmap_levels = 0;
 
-	if (!opts.m_etc1_only)
+	//if (!opts.m_etc1_only)
+	if (opts.m_format_only == -1)
 	{
 		// Now unpack to RGBA using the transcoder itself to do the unpacking to raster images
 		for (uint32_t image_index = 0; image_index < fileinfo.m_total_images; image_index++)
@@ -4252,7 +4269,7 @@ static bool test_mode(command_line_params& opts)
 		size_t data_size = 0;
 
 		// Test ETC1S
-		flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0);
+		flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagPrintStats | cFlagPrintStatus;
 
 		void* pData = basis_compress(source_images, flags_and_quality, uastc_rdo_quality, &data_size, &stats);
 		if (!pData)
@@ -4279,7 +4296,7 @@ static bool test_mode(command_line_params& opts)
 
 		if (opencl_is_available())
 		{
-			flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagUseOpenCL;
+			flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagUseOpenCL | cFlagPrintStats | cFlagPrintStatus;
 
 			pData = basis_compress(source_images, flags_and_quality, uastc_rdo_quality, &data_size, &stats);
 			if (!pData)
@@ -4315,7 +4332,7 @@ static bool test_mode(command_line_params& opts)
 		}
 
 		// Test UASTC
-		flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagUASTC;
+		flags_and_quality = (opts.m_comp_params.m_multithreading ? cFlagThreaded : 0) | cFlagUASTC | cFlagPrintStats | cFlagPrintStatus;
 
 		pData = basis_compress(source_images, flags_and_quality, uastc_rdo_quality, &data_size, &stats);
 		if (!pData)
@@ -4348,6 +4365,24 @@ static bool test_mode(command_line_params& opts)
 	return result;
 }
 
+static bool clbench_mode(command_line_params& opts)
+{
+	BASISU_NOTE_UNUSED(opts);
+	
+	bool opencl_failed = false;
+	bool use_cl = basis_benchmark_etc1s_opencl(&opencl_failed);
+	if (use_cl)
+		printf("OpenCL ETC1S encoding is faster on this machine\n");
+	else
+	{
+		if (opencl_failed)
+			printf("OpenCL failed!\n");
+		printf("CPU ETC1S encoding is faster on this machine\n");
+	}
+
+	return true;
+}
+
 static int main_internal(int argc, const char **argv)
 {
 	printf("Basis Universal GPU Texture Compressor v" BASISU_TOOL_VERSION "\nCopyright (C) 2019-2022 Binomial LLC, All rights reserved\n");
@@ -4360,7 +4395,7 @@ static int main_internal(int argc, const char **argv)
 	bool opencl_force_serialization = false;
 	for (int i = 1; i < argc; i++)
 	{
-		if (strcmp(argv[i], "-opencl") == 0)
+		if ((strcmp(argv[i], "-opencl") == 0) || (strcmp(argv[i], "-clbench") == 0))
 			use_opencl = true;
 		if (strcmp(argv[i], "-opencl_serialize") == 0)
 			opencl_force_serialization = true;
@@ -4380,13 +4415,13 @@ static int main_internal(int argc, const char **argv)
 #if defined(DEBUG) || defined(_DEBUG)
 	printf("DEBUG build\n");
 #endif
-
+		
 	if (argc == 1)
 	{
 		print_usage();
 		return EXIT_FAILURE;
 	}
-
+		
 	command_line_params opts;
 	if (!opts.parse(argc, argv))
 	{
@@ -4399,7 +4434,7 @@ static int main_internal(int argc, const char **argv)
 #else
 	printf("Multithreading: %u, Zstandard support: %u, OpenCL: %u\n", (uint32_t)opts.m_comp_params.m_multithreading, basist::basisu_transcoder_supports_ktx2_zstd(), opencl_is_available());
 #endif
-
+		
 	if (!opts.process_listing_files())
 		return EXIT_FAILURE;
 
@@ -4444,6 +4479,9 @@ static int main_internal(int argc, const char **argv)
 		break;
 	case cTest:
 		status = test_mode(opts);
+		break;
+	case cCLBench:
+		status = clbench_mode(opts);
 		break;
 	case cSplitImage:
 		status = split_image_mode(opts);
